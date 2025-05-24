@@ -39,6 +39,22 @@ package csr_pkg;
   parameter u64 MEDELEG_MASK = 64'h0;
   parameter u64 MIDELEG_MASK = 64'h0;
 
+  // Exception cause codes
+  parameter u64 MCAUSE_ECALL_U  = 64'h8;
+  parameter u64 MCAUSE_ECALL_S  = 64'h9;
+  parameter u64 MCAUSE_ECALL_M  = 64'hb;
+  parameter u64 MCAUSE_INTERRUPT_MASK = 64'h8000000000000000;
+
+  // Privilege modes
+  parameter u2 PRIV_U = 2'b00;
+  parameter u2 PRIV_S = 2'b01;
+  parameter u2 PRIV_M = 2'b11;
+
+  // MSTATUS bit positions
+  parameter int MSTATUS_MIE_POS  = 3;
+  parameter int MSTATUS_MPIE_POS = 7;
+  parameter int MSTATUS_MPP_POS  = 11;
+
   typedef struct packed {
     u1 sd;
     logic [MXLEN-2-36:0] wpri1;
