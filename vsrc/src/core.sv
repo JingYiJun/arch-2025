@@ -34,7 +34,7 @@ module core
 	logic stallF, stallD, stallE, stallM, stallW;
 	logic flushF, flushD, flushE, flushM, flushW;
 	logic readyF, readyD, readyE, readyM, readyW, ready_regfile, ready_csrfile;
-	logic jump, csr, exception, mret, interrupt_update_pc;
+	logic jump, exception, mret, interrupt_update_pc;
 
 	wire all_ready = readyF && readyD && readyE && readyM && readyW;
 
@@ -184,7 +184,6 @@ module core
 
 	hazard hazard(
 		.jump(jump),
-		.csr(csr),
 		.exception(exception),
 		.mret(mret),
 		.stallF(stallF),

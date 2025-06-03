@@ -18,7 +18,7 @@ module hazard
 
     output logic  stallF, stallD, stallE, stallM, stallW,
     output logic  flushF, flushD, flushE, flushM, flushW,
-    output logic  jump, csr, exception, mret,
+    output logic  jump, exception, mret,
     input  logic  interrupt_update_pc
 );
 
@@ -31,6 +31,7 @@ module hazard
     assign jump = dataE_nxt.ctl.jump | dataE_nxt.ctl.branch; // 跳转信号在 execute 阶段产生
 	assign exception = dataM.ctl.exception; // exception 信号在 writeback 阶段产生
 	assign mret = dataM.ctl.mret; // mret 信号在 writeback 阶段产生
+    wire csr = dataD_nxt.ctl.csr || dataE_nxt.ctl.csr || dataM_nxt.ctl.csr;
 
     always_comb begin
 

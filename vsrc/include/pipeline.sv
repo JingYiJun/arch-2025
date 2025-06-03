@@ -1,6 +1,8 @@
 `ifndef PIPELINE_SV
 `define PIPELINE_SV
+`ifdef VERILATOR
 `include "include/common.sv"
+`endif
 
 package pipeline;
   import common::*;
