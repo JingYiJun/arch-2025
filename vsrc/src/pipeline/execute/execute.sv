@@ -32,7 +32,8 @@ module execute
     );
 
     always_comb begin
-        dataE.ctl = dataD.ctl;
+        dataE.valid = dataD.valid;
+        dataE.ctl = dataD.valid ? dataD.ctl : '0;
         dataE.dst = dataD.dst;
         dataE.instr = dataD.instr;
         dataE.rd = alusrcb;

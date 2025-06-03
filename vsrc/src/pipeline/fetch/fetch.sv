@@ -24,6 +24,7 @@ module fetch
     assign ireq.valid = 1'b1;
     assign dataF.instr.pc = flush ? 0 : pc;
     assign dataF.instr.raw_instr = flush ? 0 : iresp.data;
+    assign dataF.valid = !flush;
     assign readyF = iresp.data_ok;
 
 	

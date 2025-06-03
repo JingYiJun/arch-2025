@@ -38,26 +38,62 @@ module memory
     assign dataM.csr_addr = dataE.csr_addr;
     assign dataM.csr_data = dataE.csr_data;
 
-    assign dreq.size = dataE.ctl.op inside {SD, LD}      ? MSIZE8 : 
-                       dataE.ctl.op inside {SW, LW, LWU} ? MSIZE4 :
-                       dataE.ctl.op inside {SH, LH, LHU} ? MSIZE2 : MSIZE1;
-
-    assign dreq.strobe = dataE.ctl.op inside {SD} ? 8'hff : 
-                         dataE.ctl.op inside {SW} ? 8'hf << offset_byte :
-                         dataE.ctl.op inside {SH} ? 8'h3 << offset_byte : 
-                         dataE.ctl.op inside {SB} ? 8'h1 << offset_byte : 0;
-    
     wire mem_access = dataE.ctl.mem_read | dataE.ctl.mem_write;
     assign dreq.data  = dataE.rd << offset_bit;
 	assign dreq.valid = mem_access && (mem_access_state == WAITING);
     assign readyM = mem_access ? mem_access_state == RECEIVED : 1;
 
-    
-
     always_comb begin
-        dataM.ctl = dataE.ctl;
+        dataM.valid = dataE.valid;
+        dataM.ctl = dataE.valid ? dataE.ctl : '0;
         dataM.dst = dataE.dst;
         dataM.instr = dataE.instr;
+
+        dreq.strobe = 0;
+        dataM.ctl.store_address_misaligned = 0;
+        dataM.ctl.load_address_misaligned = 0;
+        dreq.size = MSIZE1;
+
+        case (dataE.ctl.op)
+            SD, LD: dreq.size = MSIZE8;
+            SW, LW, LWU: dreq.size = MSIZE4;
+            SH, LH, LHU: dreq.size = MSIZE2;
+            SB, LB, LBU: dreq.size = MSIZE1;
+            default: ;
+        endcase
+
+        case (dataE.ctl.op)
+            SD: begin
+                dreq.strobe = 8'hff;
+                dataM.ctl.store_address_misaligned = dataE.aluout[2:0] != 3'b000;
+            end
+            SW: begin
+                dreq.strobe = 8'hf << offset_byte;
+                dataM.ctl.store_address_misaligned = dataE.aluout[1:0] != 2'b00;
+            end
+            SH: begin
+                dreq.strobe = 8'h3 << offset_byte;
+                dataM.ctl.store_address_misaligned = dataE.aluout[0] != 1'b0;
+            end
+            SB: begin
+                dreq.strobe = 8'h1 << offset_byte;
+                dataM.ctl.store_address_misaligned = 0;
+            end
+            default: ;
+        endcase
+
+        dataM.ctl.load_address_misaligned = 0;
+        case (dataE.ctl.op)
+            LD: dataM.ctl.load_address_misaligned = dataE.aluout[2:0] != 3'b000;
+            LW, LWU: dataM.ctl.load_address_misaligned = dataE.aluout[1:0] != 2'b00;
+            LH, LHU: dataM.ctl.load_address_misaligned = dataE.aluout[0] != 1'b0;
+            LB, LBU: dataM.ctl.load_address_misaligned = 0;
+            default: ;
+        endcase
+
+        if (dataM.ctl.load_address_misaligned || dataM.ctl.store_address_misaligned) begin
+            dataM.ctl.exception = 1;
+        end
 
         case(dataE.ctl.op)
             LD: begin
@@ -85,6 +121,7 @@ module memory
                 dataM.writedata = dataE.aluout;
             end
         endcase
+        
     end
 
 	always_ff @(posedge clk ) begin

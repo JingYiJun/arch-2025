@@ -63,6 +63,7 @@ package pipeline;
   // when FUNC3 OTHER: FUNC7
   parameter FUNC7_ECALL = 7'b0000000;     // funct7: ECALL
   parameter FUNC7_MRET = 7'b0011000;     // funct7: MRET
+  parameter FUNC7_SFENCE_VMA = 7'b0001001; // func7: SFENCE.VMA
 
   parameter FUNC6_SRLI = 6'b000000;       // funct6: SRLI
   parameter FUNC6_SRAI = 6'b010000;       // funct6: SRAI
@@ -144,6 +145,11 @@ typedef struct packed {
 	u1 csr;
   u1 exception;
   u1 mret;
+  u1 ecall;
+  u1 instruction_address_misaligned;
+  u1 invalid_instruction;
+  u1 load_address_misaligned;
+  u1 store_address_misaligned;
 } control_t;
 
 typedef struct packed {
@@ -153,6 +159,7 @@ typedef struct packed {
 
 typedef struct packed {
 	instr_data_t instr;
+  u1 valid;
 } fetch_data_t;
 
 typedef struct packed {
@@ -164,6 +171,7 @@ typedef struct packed {
 	control_t ctl;
 	creg_addr_t dst;
 	instr_data_t instr;
+  u1 valid;
 } decode_data_t;
 
 typedef struct packed {
@@ -175,6 +183,7 @@ typedef struct packed {
 	creg_addr_t dst;
 	instr_data_t instr;
 	word_t pcjump;
+  u1 valid;
 } exec_data_t;
 
 typedef struct packed {
@@ -185,6 +194,7 @@ typedef struct packed {
 	creg_addr_t dst;
 	instr_data_t instr;
 	word_t mem_addr;
+  u1 valid;
 } mem_data_t;
 
 typedef struct packed {

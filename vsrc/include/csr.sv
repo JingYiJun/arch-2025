@@ -40,10 +40,25 @@ package csr_pkg;
   parameter u64 MIDELEG_MASK = 64'h0;
 
   // Exception cause codes
+  parameter u64 MCAUSE_INSTRUCTION_ADDRESS_MISALIGNED = 64'h0;
+  parameter u64 MCAUSE_INSTRUCTION_ACCESS_FAULT = 64'h1;
+  parameter u64 MCAUSE_ILLEGAL_INSTRUCTION = 64'h2;
+  parameter u64 MCAUSE_BREAKPOINT = 64'h3;
+  parameter u64 MCAUSE_LOAD_ADDRESS_MISALIGNED = 64'h4;
+  parameter u64 MCAUSE_LOAD_ACCESS_FAULT = 64'h5;
+  parameter u64 MCAUSE_STORE_AMO_ADDRESS_MISALIGNED = 64'h6;
+  parameter u64 MCAUSE_STORE_AMO_ACCESS_FAULT = 64'h7;
   parameter u64 MCAUSE_ECALL_U  = 64'h8;
   parameter u64 MCAUSE_ECALL_S  = 64'h9;
   parameter u64 MCAUSE_ECALL_M  = 64'hb;
+  parameter u64 MCAUSE_INSTRUCTION_PAGE_FAULT = 64'hc;
+  parameter u64 MCAUSE_LOAD_PAGE_FAULT = 64'hd;
   parameter u64 MCAUSE_INTERRUPT_MASK = 64'h8000000000000000;
+
+  // Interrupt cause codes
+  parameter u64 MCAUSE_SOFTWARE_INTERRUPT = 64'h3;
+  parameter u64 MCAUSE_TIMER_INTERRUPT = 64'h7;
+  parameter u64 MCAUSE_EXTERNAL_INTERRUPT = 64'hb;
 
   // Privilege modes
   parameter u2 PRIV_U = 2'b00;

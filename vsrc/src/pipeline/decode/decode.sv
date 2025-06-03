@@ -27,12 +27,14 @@ module decode
     control_t ctl;
 
     decoder decoder(
+        .pc(dataF.instr.pc),
         .raw_instr(dataF.instr.raw_instr),
         .imm(dataD.imm),
         .ctl(ctl)
     );
 
-    assign dataD.ctl = ctl;
+    assign dataD.valid = dataF.valid;
+    assign dataD.ctl = dataF.valid ? ctl : '0;
     assign dataD.dst = dataF.instr.raw_instr[11:7];
     assign dataD.instr = dataF.instr;
     assign ra1 = dataF.instr.raw_instr[19:15];

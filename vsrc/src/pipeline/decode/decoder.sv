@@ -8,7 +8,9 @@
 
 module decoder
     import common::*;
-    import pipeline::*;(
+    import pipeline::*;
+(
+    input word_t pc,
     input u32 raw_instr,
     output word_t imm,
     output control_t ctl
@@ -21,6 +23,11 @@ module decoder
     always_comb begin
         ctl = '0;
         imm = '0;
+        if (pc[1:0] != 2'b00) begin
+            ctl.exception = 1;
+            ctl.instruction_address_misaligned = 1;
+        end 
+        
         case (opcode)
             OPCODE_RTYPE: begin
                 ctl.reg_write = 1;
@@ -40,7 +47,8 @@ module decoder
                                 ctl.op = MUL;
                             end
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
@@ -55,7 +63,8 @@ module decoder
                                 ctl.op = DIV;
                             end 
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
@@ -70,7 +79,8 @@ module decoder
                                 ctl.op = REM;
                             end
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
@@ -85,7 +95,8 @@ module decoder
                                 ctl.op = REMU;
                             end
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
@@ -104,7 +115,8 @@ module decoder
                                 ctl.op = SRA;
                             end
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
@@ -117,7 +129,8 @@ module decoder
                         ctl.aluop = ALU_SLTU;
                     end
                     default: begin
-                        ctl = 0;
+                        ctl.exception = 1;
+                        ctl.invalid_instruction = 1;
                     end
                 endcase
             end
@@ -158,7 +171,8 @@ module decoder
                                 ctl.op = SRAI;
                             end
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
@@ -171,7 +185,8 @@ module decoder
                         ctl.aluop = ALU_SLTU;
                     end
                     default: begin
-                        ctl = 0;
+                        ctl.exception = 1;
+                        ctl.invalid_instruction = 1;
                     end
                 endcase
             end
@@ -194,7 +209,8 @@ module decoder
                                 ctl.op = MULW;
                             end
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
@@ -213,12 +229,14 @@ module decoder
                                 ctl.op = SRAW;
                             end
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
                     default: begin
-                        ctl = 0;
+                        ctl.exception = 1;
+                        ctl.invalid_instruction = 1;
                     end
                 endcase
             end
@@ -247,12 +265,14 @@ module decoder
                                 ctl.op = SRAIW;
                             end
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
                     default: begin
-                        ctl = 0;
+                        ctl.exception = 1;
+                        ctl.invalid_instruction = 1;
                     end
                 endcase
             end
@@ -287,7 +307,8 @@ module decoder
                         ctl.op = LWU;
                     end
                     default: begin
-                        ctl = 0;
+                        ctl.exception = 1;
+                        ctl.invalid_instruction = 1;
                     end
                 endcase
             end
@@ -316,7 +337,8 @@ module decoder
                         ctl.op = BGEU;
                     end
                     default: begin
-                        ctl = '0;
+                        ctl.exception = 1;
+                        ctl.invalid_instruction = 1;
                     end
                 endcase
             end
@@ -340,7 +362,8 @@ module decoder
                         ctl.op = SW;
                     end
                     default: begin
-                        ctl = 0;  // 无效的操作
+                        ctl.exception = 1;
+                        ctl.invalid_instruction = 1;
                     end
                 endcase
             end
@@ -411,27 +434,34 @@ module decoder
                         case (f7)
                             FUNC7_ECALL: begin
                                 ctl.op = ECALL;
-                                ctl.reg_write = 0;       
+                                ctl.reg_write = 0;
                                 ctl.exception = 1;
+                                ctl.ecall = 1;
                             end
                             FUNC7_MRET: begin
                                 ctl.op = MRET;
                                 ctl.reg_write = 0;
                                 ctl.mret = 1;
                             end
+                            FUNC7_SFENCE_VMA: begin
+                                ctl.op = UNKNOWN;
+                            end
                             default: begin
-                                ctl = 0;
+                                ctl.exception = 1;
+                                ctl.invalid_instruction = 1;
                             end
                         endcase
                     end
                     default: begin
-                        ctl = 0;
+                        ctl.exception = 1;
+                        ctl.invalid_instruction = 1;
                     end
                 endcase
             end
 
             default: begin
-                ctl = 0;
+                ctl.exception = 1;
+                ctl.invalid_instruction = 1;
             end
         endcase
     end

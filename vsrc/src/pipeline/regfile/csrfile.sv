@@ -7,6 +7,7 @@
 `include "include/csr.sv"
 `endif
 
+/* verilator lint_off PINMISSING */
 module csrfile 
     import common::*;
     import pipeline::*;
@@ -20,14 +21,22 @@ module csrfile
     output word_t       rdata,      // 读数据
     
     // Exception handling interface
-    input  mem_data_t   dataM,    // 从 memory 阶段传来的数据，用于判断是否有异常
+    input  word_t       pc,
+    input  fetch_data_t dataF,
+    input  decode_data_t dataD,
+    input  exec_data_t  dataE,
+    input  mem_data_t   dataM,
     output word_t       mtvec_out,           // mtvec值输出
     output word_t       mepc_out,            // mepc值输出
     output logic [1:0]  priviledge_mode_out,     // 当前特权级
 
     // ready 信号
     output logic        ready,
-    input  logic        all_ready
+    input  logic        all_ready,
+
+    // interrupt 信号
+    input  logic        trint, swint, exint,
+    output logic        interrupt_update_pc
 );
 
     // word_t mstatus;
@@ -36,24 +45,45 @@ module csrfile
     word_t mcause, mtval, mepc, mcycle, satp;
     logic [1:0] priviledge_mode;
     word_t exception_pc;
+    word_t interrupt_pc;
     word_t exception_cause;
+    word_t interrupt_cause;
+    logic interrupt_pending;
+
+    typedef enum {
+	   EXCEPTION_CHECK, INTERRUPT_CHECK, DONE
+    } csr_check_state_t;
+
+    csr_check_state_t csr_check_state;
 
     wire exception = dataM.ctl.exception;
     wire mret = dataM.ctl.mret;
-
-    assign exception_pc = dataM.instr.pc;
+    assign ready = csr_check_state == DONE;
 
     always_comb begin
-        if (dataM.ctl.exception) begin
-            case (priviledge_mode)
-                PRIV_U: exception_cause = MCAUSE_ECALL_U;
-                PRIV_S: exception_cause = MCAUSE_ECALL_S;
-                PRIV_M: exception_cause = MCAUSE_ECALL_M;
-                default: exception_cause = MCAUSE_ECALL_M;
-            endcase
-        end else begin
-            exception_cause = 0;
+        exception_pc = 0;
+        exception_cause = 0;
+        if (exception) begin
+            exception_pc = dataM.instr.pc;
+            if (dataM.ctl.instruction_address_misaligned) begin
+                exception_cause = MCAUSE_INSTRUCTION_ADDRESS_MISALIGNED;
+            end else if (dataM.ctl.invalid_instruction) begin
+                exception_cause = MCAUSE_ILLEGAL_INSTRUCTION;
+            end else if (dataM.ctl.load_address_misaligned) begin
+                exception_cause = MCAUSE_LOAD_ADDRESS_MISALIGNED;
+            end else if (dataM.ctl.store_address_misaligned) begin
+                exception_cause = MCAUSE_STORE_AMO_ADDRESS_MISALIGNED;
+            end else if (dataM.ctl.ecall) begin
+                case (priviledge_mode)
+                    PRIV_U: exception_cause = MCAUSE_ECALL_U;
+                    PRIV_S: exception_cause = MCAUSE_ECALL_S;
+                    PRIV_M: exception_cause = MCAUSE_ECALL_M;
+                    default: exception_cause = MCAUSE_ECALL_M;
+                endcase
+            end
         end
+
+        interrupt_pc = dataM.valid ? dataM.instr.pc + 4 : dataE.valid ? dataE.instr.pc : dataD.valid ? dataD.instr.pc : dataF.valid ? dataF.instr.pc : pc;
     end
 
     assign mtvec_out = mtvec;
@@ -80,7 +110,6 @@ module csrfile
         if (reset) begin
             mstatus <= 0;
             mtvec <= 0;
-            mip <= 0;
             mie <= 0;
             mscratch <= 0;
             mepc <= 0;
@@ -90,59 +119,111 @@ module csrfile
             mhartid <= 0;
             satp <= 0;
             priviledge_mode <= PRIV_M;  // Reset to machine mode
-            ready <= 0;
+            csr_check_state <= EXCEPTION_CHECK;
+            interrupt_update_pc <= 0;
         end else if (all_ready) begin
             priviledge_mode_out <= priviledge_mode;
-            ready <= 0;
+            csr_check_state <= EXCEPTION_CHECK;
+            interrupt_update_pc <= 0;
         end else begin
-            // Handle exceptions
-            if (!ready) begin 
-                // 仅在 ready 信号为 0 时（1周期的延迟），写入 csrfile，防止数据被重复写入
-                if (exception) begin
-                    // Save current status
-                    mepc <= exception_pc;
-                    mcause <= exception_cause;
-                    mtval <= 0;
-                    
-                    // Update mstatus for exception entry
-                    mstatus.mpie <= mstatus.mie;        // Save current MIE
-                    mstatus.mie <= 1'b0;                // Disable interrupts
-                    mstatus.mpp <= priviledge_mode;     // Save current privilege mode
-                    priviledge_mode <= PRIV_M;          // Enter machine mode
-                end 
-                // Handle mret
-                else if (mret) begin
-                    // Restore status from mstatus
-                    mstatus.mie <= mstatus.mpie;        // Restore MIE
-                    mstatus.mpie <= 1'b1;               // Set MPIE to 1
-                    priviledge_mode <= mstatus.mpp;     // Restore privilege mode
-                    mstatus.mpp <= PRIV_U;              // Set MPP to least privilege
+            case (csr_check_state)
+                // Handle exceptions 
+                EXCEPTION_CHECK: begin
+                    csr_check_state <= INTERRUPT_CHECK;
+
+                    // 仅在 state 信号为 EXCEPTION_CHECK 时（1周期的延迟），写入 csrfile，防止数据被重复写入
+                    if (exception) begin
+                        // Save current status
+                        mepc <= exception_pc;
+                        mcause <= exception_cause;
+                        mtval <= 0;
+                        
+                        // Update mstatus for exception entry
+                        mstatus.mpie <= mstatus.mie;        // Save current MIE
+                        mstatus.mie <= 1'b0;                // Disable interrupts
+                        mstatus.mpp <= priviledge_mode;     // Save current privilege mode
+                        priviledge_mode <= PRIV_M;          // Enter machine mode
+                    end
+                    // Handle mret
+                    else if (mret) begin
+                        // Restore status from mstatus
+                        mstatus.mie <= mstatus.mpie;        // Restore MIE
+                        mstatus.mpie <= 1'b1;               // Set MPIE to 1
+                        priviledge_mode <= mstatus.mpp;     // Restore privilege mode
+                        mstatus.mpp <= PRIV_U;              // Set MPP to least privilege
+                    end
+                    // Normal CSR writes
+                    else if (wen) begin
+                        unique case (waddr)
+                            CSR_MSTATUS: mstatus <= wdata & MSTATUS_MASK;
+                            CSR_MTVEC:   mtvec <= wdata & MTVEC_MASK;
+                            CSR_MIE:     mie <= wdata;
+                            CSR_MSCRATCH: mscratch <= wdata;
+                            CSR_MEPC:    mepc <= wdata;
+                            CSR_MCAUSE:  mcause <= wdata;
+                            CSR_MTVAL:   mtval <= wdata;
+                            CSR_MCYCLE:  mcycle <= wdata;
+                            CSR_SATP:    satp <= wdata;
+                            default:     ;
+                        endcase
+                    end
                 end
-                // Normal CSR writes
-                else if (wen) begin
-                    unique case (waddr)
-                        CSR_MSTATUS: mstatus <= wdata & MSTATUS_MASK;
-                        CSR_MTVEC:   mtvec <= wdata & MTVEC_MASK;
-                        CSR_MIP:     mip <= wdata & MIP_MASK;
-                        CSR_MIE:     mie <= wdata;
-                        CSR_MSCRATCH: mscratch <= wdata;
-                        CSR_MEPC:    mepc <= wdata;
-                        CSR_MCAUSE:  mcause <= wdata;
-                        CSR_MTVAL:   mtval <= wdata;
-                        CSR_MCYCLE:  mcycle <= wdata;
-                        CSR_SATP:    satp <= wdata;
-                        default:     ;
-                    endcase
+                INTERRUPT_CHECK: begin
+                    csr_check_state <= DONE;
+
+                    // 仅在 state 信号为 INTERRUPT_CHECK 时（1周期的延迟），写入 csrfile，防止数据被重复写入
+                    if (interrupt_pending) begin
+                        // Save current status
+                        mepc <= interrupt_pc;
+                        mcause <= interrupt_cause | MCAUSE_INTERRUPT_MASK;
+                        mtval <= 0;
+
+                        // Update mstatus for exception entry
+                        mstatus.mpie <= mstatus.mie;        // Save current MIE
+                        mstatus.mie <= 1'b0;                // Disable interrupts
+                        mstatus.mpp <= priviledge_mode;     // Save current privilege mode
+                        priviledge_mode <= PRIV_M;          // Enter machine mode
+
+                        // interrupt signal for flush pipeline and update pc
+                        interrupt_update_pc <= 1;
+                    end
                 end
-            end
+                DONE: begin
+                    ;
+                end
+            endcase
             
             // Always increment cycle counter (unless being written)
             if (!wen || (wen && waddr != CSR_MCYCLE)) begin
                 mcycle <= mcycle + 1;
             end
-            ready <= 1; // 一周期后，csrfile 被赋值，ready 信号被拉高
         end
     end
+
+    // interrupt
+
+    assign mip = {52'b0, exint, 3'b0, trint, 3'b0, swint, 3'b0};
+
+    wire interrupt_valid = (priviledge_mode == PRIV_U) || mstatus.mie;
+
+    always_comb begin
+        interrupt_pending = 0;
+        interrupt_cause = 0;
+        if (interrupt_valid) begin
+            if (mip[3] && mie[3]) begin
+                interrupt_pending = 1;
+                interrupt_cause = MCAUSE_SOFTWARE_INTERRUPT;
+            end else if (mip[7] && mie[7]) begin
+                interrupt_pending = 1;
+                interrupt_cause = MCAUSE_TIMER_INTERRUPT;
+            end else if (mip[11] && mie[11]) begin
+                interrupt_pending = 1;
+                interrupt_cause = MCAUSE_EXTERNAL_INTERRUPT;
+            end
+        end
+    end
+
+
 
 endmodule
 

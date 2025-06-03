@@ -34,6 +34,7 @@ module core
 	logic stallF, stallD, stallE, stallM, stallW;
 	logic flushF, flushD, flushE, flushM, flushW;
 	logic readyF, readyD, readyE, readyM, readyW, ready_regfile, ready_csrfile;
+	logic jump, csr, exception, mret, interrupt_update_pc;
 
 	wire all_ready = readyF && readyD && readyE && readyM && readyW;
 
@@ -50,10 +51,10 @@ module core
 	mem_data_t 		dataM, dataM_nxt;
 
 	wire validpc = pc != 0;
-	wire validF = dataF != 0;
-	wire validD = dataD != 0;
-	wire validE = dataE != 0;
-	wire validM = dataM != 0;
+	wire validF = dataF.valid;
+	wire validD = dataD.valid;
+	wire validE = dataE.valid;
+	wire validM = dataM.valid;
 
 	creg_addr_t ra1, ra2;
 	word_t rd1, rd2;
@@ -66,10 +67,6 @@ module core
 	wire commit_valid = all_ready && dataM.instr.raw_instr != 0;
 
 	assign satp = csrfile.satp;
-
-	wire jump = dataE_nxt.ctl.jump | dataE_nxt.ctl.branch; // 跳转信号在 execute 阶段产生
-	wire exception = dataM.ctl.exception; // exception 信号在 writeback 阶段产生
-	wire mret = dataM.ctl.mret; // mret 信号在 writeback 阶段产生
 
 	pipereg #(.T(u64), .INIT(PCINIT)) pcupdate(
 		.clk(clk),
@@ -136,7 +133,7 @@ module core
 		.jump 		(jump),
 		.mtvec      (mtvec_out),
 		.mepc       (mepc_out),
-		.exception  (exception),
+		.exception  (exception || interrupt_update_pc),
 		.mret       (mret),
 		.pc_selected(pc_nxt)
 	);
@@ -187,7 +184,7 @@ module core
 
 	hazard hazard(
 		.jump(jump),
-		.csr(dataD_nxt.ctl.csr | dataE_nxt.ctl.csr  | dataM_nxt.ctl.csr),
+		.csr(csr),
 		.exception(exception),
 		.mret(mret),
 		.stallF(stallF),
@@ -202,11 +199,16 @@ module core
 		.flushW(flushW),
 		.dataD_nxt(dataD_nxt),
 		.dataD(dataD),
+		.dataE_nxt(dataE_nxt),
+		.dataE(dataE),
+		.dataM_nxt(dataM_nxt),
+		.dataM(dataM),
 		.validpc(validpc),
 		.validF(validF),
 		.validD(validD),
 		.validE(validE),
-		.validM(validM)
+		.validM(validM),
+		.interrupt_update_pc(interrupt_update_pc)
 	);
 
 	forward forward (
@@ -228,10 +230,18 @@ module core
 		.rdata(csr_data),
 		.ready(ready_csrfile),
 		.all_ready(all_ready),
-		.dataM(dataM),
 		.mtvec_out(mtvec_out),
 		.mepc_out(mepc_out),
-		.priviledge_mode_out(priviledge_mode)
+		.priviledge_mode_out(priviledge_mode),
+		.interrupt_update_pc(interrupt_update_pc),
+		.pc(pc),
+		.dataF(dataF),
+		.dataD(dataD),
+		.dataE(dataE),
+		.dataM(dataM),
+		.trint(trint),
+		.swint(swint),
+		.exint(exint)
 	);
 
 
