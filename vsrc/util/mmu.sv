@@ -36,6 +36,9 @@ module mmu
         if (rst) begin
             state <= IDLE;
             skip <= 0;
+
+            resp_virt <= 0;
+            req_phys <= 0;
         end else begin
             case (state)
                 CLEANUP: begin
