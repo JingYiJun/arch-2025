@@ -32,6 +32,9 @@ module mmu
 
     mmu_state state;
 
+    logic resp_phys_last_ready;
+    wire phy_ready = !resp_phys_last_ready && resp_phys.last && resp_phys.ready;
+
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             state <= IDLE;
@@ -40,6 +43,7 @@ module mmu
             resp_virt <= 0;
             req_phys <= 0;
         end else begin
+            resp_phys_last_ready <= resp_phys.ready;
             case (state)
                 CLEANUP: begin
                     // clear the resp of last mmu translate
@@ -73,7 +77,7 @@ module mmu
                         req_phys.burst <= req_virt.burst;
                     end
 
-                PT1: if (resp_phys.last && resp_phys.ready) begin
+                PT1: if (phy_ready) begin
                     state <= PT2;
                     req_phys.valid <= req_virt.valid;
                     req_phys.is_write <= 0;
@@ -83,9 +87,13 @@ module mmu
                     req_phys.data <= req_virt.data;
                     req_phys.len <= req_virt.len;
                     req_phys.burst <= req_virt.burst;
+                end else if (!req_virt.valid) begin
+                    state <= CLEANUP;
+
+                    req_phys.valid <= 0;
                 end
 
-                PT2: if (resp_phys.last && resp_phys.ready) begin
+                PT2: if (phy_ready) begin
                     state <= PT3;
                     req_phys.valid <= req_virt.valid;
                     req_phys.is_write <= 0;
@@ -95,9 +103,13 @@ module mmu
                     req_phys.data <= req_virt.data;
                     req_phys.len <= req_virt.len;
                     req_phys.burst <= req_virt.burst;
+                end else if (!req_virt.valid) begin
+                    state <= CLEANUP;
+
+                    req_phys.valid <= 0;
                 end
 
-                PT3: if (resp_phys.last && resp_phys.ready) begin
+                PT3: if (phy_ready) begin
                     state <= PHY;
                     req_phys.valid <= req_virt.valid;
                     req_phys.is_write <= req_virt.is_write;
@@ -109,9 +121,13 @@ module mmu
                     req_phys.burst <= req_virt.burst;
 
                     skip <= resp_phys.data[29] == 0; // for the stupid difftest
+                end else if (!req_virt.valid) begin
+                    state <= CLEANUP;
+
+                    req_phys.valid <= 0;
                 end
 
-                PHY: if (resp_phys.last && resp_phys.ready) begin
+                PHY: if (phy_ready) begin
                     state <= CLEANUP;
 
                     // clear the request
