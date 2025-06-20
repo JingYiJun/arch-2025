@@ -42,6 +42,7 @@ module csrfile
     // word_t mstatus;
     mstatus_t mstatus;
     word_t mtvec, mip, mie, mscratch, mhartid;
+    word_t mip_writable;
     word_t mcause, mtval, mepc, mcycle, satp;
     logic [1:0] priviledge_mode;
     word_t exception_pc;
@@ -157,6 +158,7 @@ module csrfile
                         unique case (waddr)
                             CSR_MSTATUS: mstatus <= wdata & MSTATUS_MASK;
                             CSR_MTVEC:   mtvec <= wdata & MTVEC_MASK;
+                            CSR_MIP:     mip_writable <= wdata & MIP_MASK;
                             CSR_MIE:     mie <= wdata;
                             CSR_MSCRATCH: mscratch <= wdata;
                             CSR_MEPC:    mepc <= wdata;
@@ -202,7 +204,7 @@ module csrfile
 
     // interrupt
 
-    assign mip = {52'b0, exint, 3'b0, trint, 3'b0, swint, 3'b0};
+    assign mip = {mip_writable[63:12], exint, mip_writable[10:8], trint, mip_writable[6:4], swint, mip_writable[2:0]};
 
     wire interrupt_valid = (priviledge_mode == PRIV_U) || mstatus.mie;
 
